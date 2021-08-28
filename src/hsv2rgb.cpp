@@ -702,7 +702,64 @@ CHSV rgb2hsv_approximate( const CRGB& rgb)
     h += 1;
     return CHSV( h, s, v);
 }
+CHSV rgb2hsv_accurate(const CRGB& inputColor)
+{
+  rgb in;
+  in.r = double(inputColor.r) / 255;
+  in.g = double(inputColor.g) / 255;
+  in.b = double(inputColor.b) / 255;
 
+  hsv         out;
+  double      min, max, delta;
+
+  min = in.r < in.g ? in.r : in.g;
+  min = min  < in.b ? min  : in.b;
+
+  max = in.r > in.g ? in.r : in.g;
+  max = max  > in.b ? max  : in.b;
+
+  out.v = max;                                // v
+  delta = max - min;
+  if (delta < 0.00001)
+  {
+    out.s = 0;
+    out.h = 0; // undefined, maybe nan?
+
+    out.h = map(out.h, 0, 360, 0, 255);
+    out.s *= 255;
+    out.v *= 255;
+    return CHSV(round(out.h), round(out.s), round(out.v));
+  }
+  if ( max > 0.0 ) { // NOTE: if Max is == 0, this divide would cause a crash
+    out.s = (delta / max);                  // s
+  } else {
+    // if max is 0, then r = g = b = 0
+    // s = 0, h is undefined
+    out.s = 0.0;
+    out.h = NAN;                            // its now undefined
+
+    out.h = map(out.h, 0, 360, 0, 255);
+    out.s *= 255;
+    out.v *= 255;
+    return CHSV(round(out.h), round(out.s), round(out.v));
+  }
+  if ( in.r >= max )                          // > is bogus, just keeps compilor happy
+    out.h = ( in.g - in.b ) / delta;        // between yellow & magenta
+  else if ( in.g >= max )
+    out.h = 2.0 + ( in.b - in.r ) / delta;  // between cyan & yellow
+  else
+    out.h = 4.0 + ( in.r - in.g ) / delta;  // between magenta & cyan
+
+  out.h *= 60.0;                              // degrees
+
+  if ( out.h < 0.0 )
+    out.h += 360.0;
+
+  out.h = map(out.h, 0, 360, 0, 255);
+  out.s *= 255;
+  out.v *= 255;
+  return CHSV(round(out.h), round(out.s), round(out.v));
+}
 // Examples that need work:
 //   0,192,192
 //   192,64,64

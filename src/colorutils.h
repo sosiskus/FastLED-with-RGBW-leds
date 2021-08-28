@@ -340,7 +340,8 @@ void blurColumns(CRGB* leds, uint8_t width, uint8_t height, fract8 blur_amount);
 // This is NOT a chromatically correct 'black body radiation'
 // spectrum, but it's surprisingly close, and it's fast and small.
 CRGB HeatColor( uint8_t temperature);
-
+CRGB HeatColor( uint8_t temperature, CRGB mapColor);
+CRGBW HeatColor( uint8_t temperature, CRGBW mapColor);
 
 // Palettes
 //

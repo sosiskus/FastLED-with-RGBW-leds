@@ -84,7 +84,20 @@ void hsv2rgb_raw(const struct CHSV* phsv, struct CRGB * prgb, int numLeds);
 //   The more desaturated the original RGB color is, the rougher the
 //   approximation, and the less accurate the results.
 //
+struct rgb {
+  double r;       // a fraction between 0 and 1
+  double g;       // a fraction between 0 and 1
+  double b;       // a fraction between 0 and 1
+};
+
+struct hsv {
+  double h;       // angle in degrees
+  double s;       // a fraction between 0 and 1
+  double v;       // a fraction between 0 and 1
+};
+
 CHSV rgb2hsv_approximate( const CRGB& rgb);
+CHSV rgb2hsv_accurate(const CRGB& inputColor);
 
 FASTLED_NAMESPACE_END
 
