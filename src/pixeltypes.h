@@ -130,7 +130,7 @@ struct CRGBW {
 
     /// allow construction from H, S, V
     inline CRGBW(uint8_t ir, uint8_t ig, uint8_t ib, uint8_t iw) __attribute__((always_inline))
-        : r(ir), g(ig), b(ib), w(iw)
+        : g(ig), r(ir), b(ib), w(iw)
     {
     }
 
