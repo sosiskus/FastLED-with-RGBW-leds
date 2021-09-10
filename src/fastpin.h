@@ -117,11 +117,11 @@ public:
 	inline void strobe() __attribute__ ((always_inline)) { toggle(); toggle(); }
 	inline void toggle() __attribute__ ((always_inline)) { *mInPort = mPinMask; }
 
-	inline void hi(register port_ptr_t port) __attribute__ ((always_inline)) { *port |= mPinMask; }
-	inline void lo(register port_ptr_t port) __attribute__ ((always_inline)) { *port &= ~mPinMask; }
-	inline void set(register port_t val) __attribute__ ((always_inline)) { *mPort = val; }
+	inline void hi( port_ptr_t port) __attribute__ ((always_inline)) { *port |= mPinMask; }
+	inline void lo( port_ptr_t port) __attribute__ ((always_inline)) { *port &= ~mPinMask; }
+	inline void set( port_t val) __attribute__ ((always_inline)) { *mPort = val; }
 
-	inline void fastset(register port_ptr_t port, register port_t val) __attribute__ ((always_inline)) { *port  = val; }
+	inline void fastset( port_ptr_t port,  port_t val) __attribute__ ((always_inline)) { *port  = val; }
 
 	port_t hival() __attribute__ ((always_inline)) { return *mPort | mPinMask;  }
 	port_t loval() __attribute__ ((always_inline)) { return *mPort & ~mPinMask; }
@@ -148,14 +148,14 @@ public:
 /// The simplest level of Pin class.  This relies on runtime functions durinig initialization to get the port/pin mask for the pin.  Most
 /// of the accesses involve references to these static globals that get set up.  This won't be the fastest set of pin operations, but it
 /// will provide pin level access on pretty much all arduino environments.  In addition, it includes some methods to help optimize access in
-/// various ways.  Namely, the versions of hi, lo, and fastset that take the port register as a passed in register variable (saving a global
+/// various ways.  Namely, the versions of hi, lo, and fastset that take the port  as a passed in  variable (saving a global
 /// dereference), since these functions are aggressively inlined, that can help collapse out a lot of extraneous memory loads/dereferences.
 ///
 /// In addition, if, while writing a bunch of data to a pin, you know no other pins will be getting written to, you can get/cache a value of
-/// the pin's port register and use that to do a full set to the register.  This results in one being able to simply do a store to the register,
+/// the pin's port  and use that to do a full set to the .  This results in one being able to simply do a store to the ,
 /// vs. the load, and/or, and store that would be done normally.
 ///
-/// There are platform specific instantiations of this class that provide direct i/o register access to pins for much higher speed pin twiddling.
+/// There are platform specific instantiations of this class that provide direct i/o  access to pins for much higher speed pin twiddling.
 ///
 /// Note that these classes are all static functions.  So the proper usage is Pin<13>::hi(); or such.  Instantiating objects is not recommended,
 /// as passing Pin objects around will likely -not- have the effect you're expecting.
@@ -186,11 +186,11 @@ public:
 
 	inline static void toggle() __attribute__ ((always_inline)) { *sInPort = sPinMask; }
 
-	inline static void hi(register port_ptr_t port) __attribute__ ((always_inline)) { *port |= sPinMask; }
-	inline static void lo(register port_ptr_t port) __attribute__ ((always_inline)) { *port &= ~sPinMask; }
-	inline static void set(register port_t val) __attribute__ ((always_inline)) { *sPort = val; }
+	inline static void hi( port_ptr_t port) __attribute__ ((always_inline)) { *port |= sPinMask; }
+	inline static void lo( port_ptr_t port) __attribute__ ((always_inline)) { *port &= ~sPinMask; }
+	inline static void set( port_t val) __attribute__ ((always_inline)) { *sPort = val; }
 
-	inline static void fastset(register port_ptr_t port, register port_t val) __attribute__ ((always_inline)) { *port  = val; }
+	inline static void fastset( port_ptr_t port,  port_t val) __attribute__ ((always_inline)) { *port  = val; }
 
 	static port_t hival() __attribute__ ((always_inline)) { return *sPort | sPinMask;  }
 	static port_t loval() __attribute__ ((always_inline)) { return *sPort & ~sPinMask; }
