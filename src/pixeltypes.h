@@ -95,84 +95,6 @@ typedef enum
     HUE_PINK = 224
 } HSVHue;
 
-//===============
-/// Representation of an HSV pixel (hue, saturation, value (aka brightness)).
-struct CRGBW
-{
-    union
-    {
-        struct
-        {
-            union
-            {
-                uint8_t g;
-                uint8_t green;
-            };
-            union
-            {
-                uint8_t r;
-                uint8_t red;
-            };
-            union
-            {
-                uint8_t b;
-                uint8_t blue;
-            };
-            union
-            {
-                uint8_t w;
-                uint8_t white;
-            };
-        };
-        uint8_t raw[4];
-    };
-
-    /// Array access operator to index into the chsv object
-    inline uint8_t &operator[](uint8_t x) __attribute__((always_inline))
-    {
-        return raw[x];
-    }
-
-    inline const bool operator==(const CRGBW &rhs) const __attribute__((always_inline))
-    {
-        return (raw[0] == rhs.raw[0]) && (raw[1] == rhs.raw[1]) && (raw[2] == rhs.raw[2]) && (raw[3] == rhs.raw[3]);
-    }
-
-    /// default values are UNITIALIZED
-    inline CRGBW() __attribute__((always_inline)) = default;
-
-    /// allow construction from H, S, V
-    inline CRGBW(uint8_t ir, uint8_t ig, uint8_t ib, uint8_t iw) __attribute__((always_inline))
-    : g(ig), r(ir), b(ib), w(iw)
-    {
-    }
-
-    /// allow copy construction
-    inline CRGBW(const CRGBW &rhs) __attribute__((always_inline)) = default;
-
-    inline CRGBW &operator=(const CRGBW &rhs) __attribute__((always_inline)) = default;
-
-    inline CRGBW &setRGBW(uint8_t ir, uint8_t ig, uint8_t ib, uint8_t iw) __attribute__((always_inline))
-    {
-        r = ir;
-        g = ig;
-        b = ib;
-        w = iw;
-        return *this;
-    }
-};
-
-inline uint16_t getRGBWsize(uint16_t nleds)
-{
-    uint16_t nbytes = nleds * 4;
-    if (nbytes % 3 > 0)
-        return nbytes / 3 + 1;
-    else
-        return nbytes / 3;
-}
-
-//==============
-
 /// Representation of an RGB pixel (Red, Green, Blue)
 struct CRGB
 {
@@ -971,6 +893,103 @@ enum EOrder
     BRG = 0201,
     BGR = 0210
 };
+
+//===============
+/// Representation of an HSV pixel (hue, saturation, value (aka brightness)).
+struct CRGBW
+{
+    union
+    {
+        struct
+        {
+            union
+            {
+                uint8_t g;
+                uint8_t green;
+            };
+            union
+            {
+                uint8_t r;
+                uint8_t red;
+            };
+            union
+            {
+                uint8_t b;
+                uint8_t blue;
+            };
+            union
+            {
+                uint8_t w;
+                uint8_t white;
+            };
+        };
+        uint8_t raw[4];
+    };
+
+    /// Array access operator to index into the chsv object
+    inline uint8_t &operator[](uint8_t x) __attribute__((always_inline))
+    {
+        return raw[x];
+    }
+
+    inline const bool operator==(const CRGBW &rhs) const __attribute__((always_inline))
+    {
+        return (raw[0] == rhs.raw[0]) && (raw[1] == rhs.raw[1]) && (raw[2] == rhs.raw[2]) && (raw[3] == rhs.raw[3]);
+    }
+
+    /// default values are UNITIALIZED
+    inline CRGBW() __attribute__((always_inline)) = default;
+
+    /// allow construction from H, S, V
+    inline CRGBW(uint8_t ir, uint8_t ig, uint8_t ib, uint8_t iw) __attribute__((always_inline))
+    : g(ig), r(ir), b(ib), w(iw)
+    {
+    }
+
+    /// allow copy construction
+    inline CRGBW(const CRGBW &rhs) __attribute__((always_inline)) = default;
+
+    inline CRGBW &operator=(const CRGBW &rhs) __attribute__((always_inline)) = default;
+    /// allow assignment from HSV color
+    inline CRGBW &operator=(const CHSV &rhs) __attribute__((always_inline))
+    {
+        CRGB rgb;
+        hsv2rgb_rainbow(rhs, rgb);
+        (*this).r = rgb.r;
+        (*this).g = rgb.g;
+        (*this).b = rgb.b;
+        (*this).w = 0;
+        return *this;
+    }
+    inline CRGBW &operator=(const CRGB &rhs) __attribute__((always_inline))
+    {
+        (*this).r = rhs.r;
+        (*this).g = rhs.g;
+        (*this).b = rhs.b;
+        (*this).w = 0;
+        return *this;
+    }
+
+    inline CRGBW &setRGBW(uint8_t ir, uint8_t ig, uint8_t ib, uint8_t iw) __attribute__((always_inline))
+    {
+        r = ir;
+        g = ig;
+        b = ib;
+        w = iw;
+        return *this;
+    }
+};
+
+inline uint16_t getRGBWsize(uint16_t nleds)
+{
+    uint16_t nbytes = nleds * 4;
+    if (nbytes % 3 > 0)
+        return nbytes / 3 + 1;
+    else
+        return nbytes / 3;
+}
+
+//==============
 
 FASTLED_NAMESPACE_END
 ///@}
