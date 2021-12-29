@@ -1,306 +1,978 @@
-#ifndef __INC_PIXELSET_H
-#define __INC_PIXELSET_H
+#ifndef __INC_PIXELS_H
+#define __INC_PIXELS_H
 
 #include "FastLED.h"
 
-#ifndef abs
-#include <stdlib.h>
-#endif
+#include <stdint.h>
+#include "lib8tion.h"
+#include "color.h"
 
-/////  Represents a set of CRGB led objects.  Provides the [] array operator, and works like a normal array in that case.
-/////  This should be kept in sync with the set of functions provided by CRGB as well as functions in colorutils.  Note
-/////  that a pixel set is a window into another set of led data, it is not its own set of led data.
-template<class PIXEL_TYPE>
-class CPixelView {
-public:
-    const int8_t  dir;
-    const int   len;
-    PIXEL_TYPE * const leds;
-    PIXEL_TYPE * const end_pos;
+FASTLED_NAMESPACE_BEGIN
 
-public:
-    /// PixelSet copy constructor
-    inline CPixelView(const CPixelView & other) : dir(other.dir), len(other.len), leds(other.leds), end_pos(other.end_pos) {}
+struct CRGB;
+struct CHSV;
 
-    /// pixelset constructor for a pixel set starting at the given PIXEL_TYPE* and going for _len leds.  Note that the length
-    /// can be backwards, creating a PixelSet that walks backwards over the data
-    /// @param leds point to the raw led data
-    /// @param len how many leds in this set
-    inline CPixelView(PIXEL_TYPE *_leds, int _len) : dir(_len < 0 ? -1 : 1), len(_len), leds(_leds), end_pos(_leds + _len) {}
+///@defgroup Pixeltypes CHSV and CRGB type definitions
+///@{
 
-    /// PixelSet constructor for the given set of leds, with start and end boundaries.  Note that start can be after
-    /// end, resulting in a set that will iterate backwards
-    /// @param leds point to the raw led data
-    /// @param start the start index of the leds for this array
-    /// @param end the end index of the leds for this array
-    inline CPixelView(PIXEL_TYPE *_leds, int _start, int _end) : dir(((_end-_start)<0) ? -1 : 1), len((_end - _start) + dir), leds(_leds + _start), end_pos(_leds + _start + len) {}
+/// Forward declaration of hsv2rgb_rainbow here,
+/// to avoid circular dependencies.
+extern void hsv2rgb_rainbow(const CHSV &hsv, CRGB &rgb);
 
-    /// Get the size of this set
-    /// @return the size of the set
-    int size() { return abs(len); }
-
-    /// Whether or not this set goes backwards
-    /// @return whether or not the set is backwards
-    bool reversed() { return len < 0; }
-
-    /// do these sets point to the same thing (note, this is different from the contents of the set being the same)
-    bool operator==(const CPixelView & rhs) const { return leds == rhs.leds && len == rhs.len && dir == rhs.dir; }
-
-    /// do these sets point to the different things (note, this is different from the contents of the set being the same)
-    bool operator!=(const CPixelView & rhs) const { return leds != rhs.leds || len != rhs.len || dir != rhs.dir; }
-
-    /// access a single element in this set, just like an array operator
-    inline PIXEL_TYPE & operator[](int x) const { if(dir & 0x80) { return leds[-x]; } else { return leds[x]; } }
-
-    /// Access an inclusive subset of the leds in this set.  Note that start can be greater than end, which will
-    /// result in a reverse ordering for many functions (useful for mirroring)
-    /// @param start the first element from this set for the new subset
-    /// @param end the last element for the new subset
-    inline CPixelView operator()(int start, int end) { return CPixelView(leds, start, end); }
-
-    /// Access an inclusive subset of the leds in this set, starting from the first.
-    /// @param end the last element for the new subset
-    /// Not sure i want this? inline CPixelView operator()(int end) { return CPixelView(leds, 0, end); }
-
-    /// Return the reverse ordering of this set
-    inline CPixelView operator-() { return CPixelView(leds, len - dir, 0); }
-
-    /// Return a pointer to the first element in this set
-    inline operator PIXEL_TYPE* () const { return leds; }
-
-    /// Assign the passed in color to all elements in this set
-    /// @param color the new color for the elements in the set
-    inline CPixelView & operator=(const PIXEL_TYPE & color) {
-        for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) = color; }
-        return *this;
-    }
-
-
-    void dump() const {
-        /**
-        Serial.print("len: "); Serial.print(len); Serial.print(", dir:"); Serial.print((int)dir);
-        Serial.print(", range:"); Serial.print((uint32_t)leds); Serial.print("-"); Serial.print((uint32_t)end_pos);
-        Serial.print(", diff:"); Serial.print((int32_t)(end_pos - leds));
-        Serial.println("");
-        **/
-    }
-
-    /// Copy the contents of the passed in set to our set.  Note if one set is smaller than the other, only the
-    /// smallest number of items will be copied over.
-    inline CPixelView & operator=(const CPixelView & rhs) {
-        for(iterator pixel = begin(), rhspixel = rhs.begin(), _end = end(), rhs_end = rhs.end(); (pixel != _end) && (rhspixel != rhs_end); ++pixel, ++rhspixel) {
-            (*pixel) = (*rhspixel);
-        }
-        return *this;
-    }
-
-    /// @name modification/scaling operators
-    //@{
-    /// Add the passed in value to r,g, b for all the pixels in this set
-    inline CPixelView & addToRGB(uint8_t inc) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) += inc; } return *this; }
-    /// Add every pixel in the other set to this set
-    inline CPixelView & operator+=(CPixelView & rhs) { for(iterator pixel = begin(), rhspixel = rhs.begin(), _end = end(), rhs_end = rhs.end(); (pixel != _end) && (rhspixel != rhs_end); ++pixel, ++rhspixel) { (*pixel) += (*rhspixel); } return *this; }
-
-    /// Subtract the passed in value from r,g,b for all pixels in this set
-    inline CPixelView & subFromRGB(uint8_t inc) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) -= inc; } return *this; }
-    /// Subtract every pixel in the other set from this set
-    inline CPixelView & operator-=(CPixelView & rhs) { for(iterator pixel = begin(), rhspixel = rhs.begin(), _end = end(), rhs_end = rhs.end(); (pixel != _end) && (rhspixel != rhs_end); ++pixel, ++rhspixel) { (*pixel) -= (*rhspixel); } return *this; }
-
-    /// Increment every pixel value in this set
-    inline CPixelView & operator++() { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel)++; } return *this; }
-    /// Increment every pixel value in this set
-    inline CPixelView & operator++(int DUMMY_ARG) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel)++; } return *this; }
-
-    /// Decrement every pixel value in this set
-    inline CPixelView & operator--() { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel)--; } return *this; }
-    /// Decrement every pixel value in this set
-    inline CPixelView & operator--(int DUMMY_ARG) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel)--; } return *this; }
-
-    /// Divide every led by the given value
-    inline CPixelView & operator/=(uint8_t d) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) /= d; } return *this; }
-    /// Shift every led in this set right by the given number of bits
-    inline CPixelView & operator>>=(uint8_t d) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) >>= d; } return *this; }
-    /// Multiply every led in this set by the given value
-    inline CPixelView & operator*=(uint8_t d) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) *= d; } return *this; }
-
-    /// Scale every led by the given scale
-    inline CPixelView & nscale8_video(uint8_t scaledown) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel).nscale8_video(scaledown); } return *this;}
-    /// Scale down every led by the given scale
-    inline CPixelView & operator%=(uint8_t scaledown) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel).nscale8_video(scaledown); } return *this; }
-    /// Fade every led down by the given scale
-    inline CPixelView & fadeLightBy(uint8_t fadefactor) { return nscale8_video(255 - fadefactor); }
-
-    /// Scale every led by the given scale
-    inline CPixelView & nscale8(uint8_t scaledown) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel).nscale8(scaledown); } return *this; }
-    /// Scale every led by the given scale
-    inline CPixelView & nscale8(PIXEL_TYPE & scaledown) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel).nscale8(scaledown); } return *this; }
-    /// Scale every led in this set by every led in the other set
-    inline CPixelView & nscale8(CPixelView & rhs) { for(iterator pixel = begin(), rhspixel = rhs.begin(), _end = end(), rhs_end = rhs.end(); (pixel != _end) && (rhspixel != rhs_end); ++pixel, ++rhspixel) { (*pixel).nscale8((*rhspixel)); } return *this; }
-
-    /// Fade every led down by the given scale
-    inline CPixelView & fadeToBlackBy(uint8_t fade) { return nscale8(255 - fade); }
-
-    /// Apply the PIXEL_TYPE |= operator to every pixel in this set with the given PIXEL_TYPE value (bringing each channel to the higher of the two values)
-    inline CPixelView & operator|=(const PIXEL_TYPE & rhs) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) |= rhs; } return *this; }
-    /// Apply the PIXEL_TYPE |= operator to every pixel in this set with every pixel in the passed in set
-    inline CPixelView & operator|=(const CPixelView & rhs) { for(iterator pixel = begin(), rhspixel = rhs.begin(), _end = end(), rhs_end = rhs.end(); (pixel != _end) && (rhspixel != rhs_end); ++pixel, ++rhspixel) { (*pixel) |= (*rhspixel); } return *this; }
-    /// Apply the PIXEL_TYPE |= operator to every pixel in this set
-    inline CPixelView & operator|=(uint8_t d) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) |= d; } return *this; }
-
-    /// Apply the PIXEL_TYPE &= operator to every pixel in this set with the given PIXEL_TYPE value (bringing each channel down to the lower of the two values)
-    inline CPixelView & operator&=(const PIXEL_TYPE & rhs) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) &= rhs; } return *this; }
-    /// Apply the PIXEL_TYPE &= operator to every pixel in this set with every pixel in the passed in set
-    inline CPixelView & operator&=(const CPixelView & rhs) { for(iterator pixel = begin(), rhspixel = rhs.begin(), _end = end(), rhs_end = rhs.end(); (pixel != _end) && (rhspixel != rhs_end); ++pixel, ++rhspixel) { (*pixel) &= (*rhspixel); } return *this; }
-    /// APply the PIXEL_TYPE &= operator to every pixel in this set with the passed in value
-    inline CPixelView & operator&=(uint8_t d) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { (*pixel) &= d; } return *this; }
-    //@}
-
-    /// Returns whether or not any leds in this set are non-zero
-    inline operator bool() { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { if((*pixel)) return true; } return false; }
-
-    // Color util functions
-    inline CPixelView & fill_solid(const PIXEL_TYPE & color) { *this = color; return *this; }
-    inline CPixelView & fill_solid(const CHSV & color) { if(dir>0) { *this = color; return *this; } }
-
-    inline CPixelView & fill_rainbow(uint8_t initialhue, uint8_t deltahue=5) {
-        if(dir >= 0) {
-            ::fill_rainbow(leds,len,initialhue,deltahue);
-        } else {
-            ::fill_rainbow(leds+len+1,-len,initialhue,deltahue);
-        }
-        return *this;
-    }
-
-    inline CPixelView & fill_gradient(const CHSV & startcolor, const CHSV & endcolor, TGradientDirectionCode directionCode  = SHORTEST_HUES) {
-        if(dir >= 0) {
-            ::fill_gradient(leds,len,startcolor, endcolor, directionCode);
-        } else {
-            ::fill_gradient(leds + len + 1, (-len), endcolor, startcolor, directionCode);
-        }
-        return *this;
-    }
-
-    inline CPixelView & fill_gradient(const CHSV & c1, const CHSV & c2, const CHSV &  c3, TGradientDirectionCode directionCode = SHORTEST_HUES) {
-        if(dir >= 0) {
-            ::fill_gradient(leds, len, c1, c2, c3, directionCode);
-        } else {
-            ::fill_gradient(leds + len + 1, -len, c3, c2, c1, directionCode);
-        }
-        return *this;
-    }
-
-    inline CPixelView & fill_gradient(const CHSV & c1, const CHSV & c2, const CHSV & c3, const CHSV & c4, TGradientDirectionCode directionCode = SHORTEST_HUES) {
-        if(dir >= 0) {
-            ::fill_gradient(leds, len, c1, c2, c3, c4, directionCode);
-        } else {
-            ::fill_gradient(leds + len + 1, -len, c4, c3, c2, c1, directionCode);
-        }
-        return *this;
-    }
-
-    inline CPixelView & fill_gradient_RGB(const PIXEL_TYPE & startcolor, const PIXEL_TYPE & endcolor, TGradientDirectionCode directionCode  = SHORTEST_HUES) {
-        if(dir >= 0) {
-            ::fill_gradient_RGB(leds,len,startcolor, endcolor);
-        } else {
-            ::fill_gradient_RGB(leds + len + 1, (-len), endcolor, startcolor);
-        }
-        return *this;
-    }
-
-    inline CPixelView & fill_gradient_RGB(const PIXEL_TYPE & c1, const PIXEL_TYPE & c2, const PIXEL_TYPE &  c3) {
-        if(dir >= 0) {
-            ::fill_gradient_RGB(leds, len, c1, c2, c3);
-        } else {
-            ::fill_gradient_RGB(leds + len + 1, -len, c3, c2, c1);
-        }
-        return *this;
-    }
-
-    inline CPixelView & fill_gradient_RGB(const PIXEL_TYPE & c1, const PIXEL_TYPE & c2, const PIXEL_TYPE & c3, const PIXEL_TYPE & c4) {
-        if(dir >= 0) {
-            ::fill_gradient_RGB(leds, len, c1, c2, c3, c4);
-        } else {
-            ::fill_gradient_RGB(leds + len + 1, -len, c4, c3, c2, c1);
-        }
-        return *this;
-    }
-
-    inline CPixelView & nblend(const PIXEL_TYPE & overlay, fract8 amountOfOverlay) { for(iterator pixel = begin(), _end = end(); pixel != _end; ++pixel) { ::nblend((*pixel), overlay, amountOfOverlay); } return *this; }
-    inline CPixelView & nblend(const CPixelView & rhs, fract8 amountOfOverlay) { for(iterator pixel = begin(), rhspixel = rhs.begin(), _end = end(), rhs_end = rhs.end(); (pixel != _end) && (rhspixel != rhs_end); ++pixel, ++rhspixel) { ::nblend((*pixel), (*rhspixel), amountOfOverlay); } return *this; }
-
-    // Note: only bringing in a 1d blur, not sure 2d blur makes sense when looking at sub arrays
-    inline CPixelView & blur1d(fract8 blur_amount) {
-        if(dir >= 0) {
-            ::blur1d(leds, len, blur_amount);
-        } else {
-            ::blur1d(leds + len + 1, -len, blur_amount);
-        }
-        return *this;
-    }
-
-    inline CPixelView & napplyGamma_video(float gamma) {
-        if(dir >= 0) {
-            ::napplyGamma_video(leds, len, gamma);
-        } else {
-            ::napplyGamma_video(leds + len + 1, -len, gamma);
-        }
-        return *this;
-    }
-
-    inline CPixelView & napplyGamma_video(float gammaR, float gammaG, float gammaB) {
-        if(dir >= 0) {
-            ::napplyGamma_video(leds, len, gammaR, gammaG, gammaB);
-        } else {
-            ::napplyGamma_video(leds + len + 1, -len, gammaR, gammaG, gammaB);
-        }
-        return *this;
-    }
-
-    // TODO: Make this a fully specified/proper iterator
-    template <class T>
-    class pixelset_iterator_base {
-        T * leds;
-        const int8_t dir;
-
-    public:
-        __attribute__((always_inline)) inline pixelset_iterator_base(const pixelset_iterator_base & rhs) : leds(rhs.leds), dir(rhs.dir) {}
-        __attribute__((always_inline)) inline pixelset_iterator_base(T * _leds, const char _dir) : leds(_leds), dir(_dir) {}
-
-        __attribute__((always_inline)) inline pixelset_iterator_base& operator++() { leds += dir; return *this; }
-        __attribute__((always_inline)) inline pixelset_iterator_base operator++(int) { pixelset_iterator_base tmp(*this); leds += dir; return tmp; }
-
-        __attribute__((always_inline)) inline bool operator==(pixelset_iterator_base & other) const { return leds == other.leds; } // && set==other.set; }
-        __attribute__((always_inline)) inline bool operator!=(pixelset_iterator_base & other) const { return leds != other.leds; } // || set != other.set; }
-
-        __attribute__((always_inline)) inline PIXEL_TYPE& operator*() const { return *leds; }
+/// Representation of an HSV pixel (hue, saturation, value (aka brightness)).
+struct CHSV
+{
+    union
+    {
+        struct
+        {
+            union
+            {
+                uint8_t hue;
+                uint8_t h;
+            };
+            union
+            {
+                uint8_t saturation;
+                uint8_t sat;
+                uint8_t s;
+            };
+            union
+            {
+                uint8_t value;
+                uint8_t val;
+                uint8_t v;
+            };
+        };
+        uint8_t raw[3];
     };
 
-    typedef pixelset_iterator_base<PIXEL_TYPE> iterator;
-    typedef pixelset_iterator_base<const PIXEL_TYPE> const_iterator;
+    /// Array access operator to index into the chsv object
+    inline uint8_t &operator[](uint8_t x) __attribute__((always_inline))
+    {
+        return raw[x];
+    }
 
-    iterator begin() { return iterator(leds, dir); }
-    iterator end() { return iterator(end_pos, dir); }
+    /// Array access operator to index into the chsv object
+    inline const uint8_t &operator[](uint8_t x) const __attribute__((always_inline))
+    {
+        return raw[x];
+    }
 
-    iterator begin() const { return iterator(leds, dir); }
-    iterator end() const { return iterator(end_pos, dir); }
+    /// default values are UNITIALIZED
+    inline CHSV() __attribute__((always_inline)) = default;
 
-    const_iterator cbegin() const { return const_iterator(leds, dir); }
-    const_iterator cend() const { return const_iterator(end_pos, dir); }
+    /// allow construction from H, S, V
+    inline CHSV(uint8_t ih, uint8_t is, uint8_t iv) __attribute__((always_inline))
+    : h(ih), s(is), v(iv)
+    {
+    }
+
+    /// allow copy construction
+    inline CHSV(const CHSV &rhs) __attribute__((always_inline)) = default;
+
+    inline CHSV &operator=(const CHSV &rhs) __attribute__((always_inline)) = default;
+
+    inline CHSV &setHSV(uint8_t ih, uint8_t is, uint8_t iv) __attribute__((always_inline))
+    {
+        h = ih;
+        s = is;
+        v = iv;
+        return *this;
+    }
 };
 
-typedef CPixelView<CRGB> CRGBSet;
+/// Pre-defined hue values for HSV objects
+typedef enum
+{
+    HUE_RED = 0,
+    HUE_ORANGE = 32,
+    HUE_YELLOW = 64,
+    HUE_GREEN = 96,
+    HUE_AQUA = 128,
+    HUE_BLUE = 160,
+    HUE_PURPLE = 192,
+    HUE_PINK = 224
+} HSVHue;
 
-__attribute__((always_inline))
-inline CRGB *operator+(const CRGBSet & pixels, int offset) { return (CRGB*)pixels + offset; }
+//===============
+/// Representation of an HSV pixel (hue, saturation, value (aka brightness)).
+struct CRGBW
+{
+    union
+    {
+        struct
+        {
+            union
+            {
+                uint8_t g;
+                uint8_t green;
+            };
+            union
+            {
+                uint8_t r;
+                uint8_t red;
+            };
+            union
+            {
+                uint8_t b;
+                uint8_t blue;
+            };
+            union
+            {
+                uint8_t w;
+                uint8_t white;
+            };
+        };
+        uint8_t raw[4];
+    };
 
+    /// Array access operator to index into the chsv object
+    inline uint8_t &operator[](uint8_t x) __attribute__((always_inline))
+    {
+        return raw[x];
+    }
 
-template<int SIZE>
-class CRGBArray : public CPixelView<CRGB> {
-    CRGB rawleds[SIZE];
+    inline const bool operator==(const CRGBW &rhs) const __attribute__((always_inline))
+    {
+        return (raw[0] == rhs.raw[0]) && (raw[1] == rhs.raw[1]) && (raw[2] == rhs.raw[2]) && (raw[3] == rhs.raw[3]);
+    }
 
-public:
-    CRGBArray() : CPixelView<CRGB>(rawleds, SIZE) {}
-    using CPixelView::operator=;
+    /// default values are UNITIALIZED
+    inline CRGBW() __attribute__((always_inline)) = default;
+
+    /// allow construction from H, S, V
+    inline CRGBW(uint8_t ir, uint8_t ig, uint8_t ib, uint8_t iw) __attribute__((always_inline))
+    : g(ig), r(ir), b(ib), w(iw)
+    {
+    }
+
+    /// allow copy construction
+    inline CRGBW(const CRGBW &rhs) __attribute__((always_inline)) = default;
+
+    inline CRGBW &operator=(const CRGBW &rhs) __attribute__((always_inline)) = default;
+
+    inline CRGBW &setRGBW(uint8_t ir, uint8_t ig, uint8_t ib, uint8_t iw) __attribute__((always_inline))
+    {
+        r = ir;
+        g = ig;
+        b = ib;
+        w = iw;
+        return *this;
+    }
 };
+
+inline uint16_t getRGBWsize(uint16_t nleds)
+{
+    uint16_t nbytes = nleds * 4;
+    if (nbytes % 3 > 0)
+        return nbytes / 3 + 1;
+    else
+        return nbytes / 3;
+}
+
+//==============
+
+/// Representation of an RGB pixel (Red, Green, Blue)
+struct CRGB
+{
+    union
+    {
+        struct
+        {
+            union
+            {
+                uint8_t r;
+                uint8_t red;
+            };
+            union
+            {
+                uint8_t g;
+                uint8_t green;
+            };
+            union
+            {
+                uint8_t b;
+                uint8_t blue;
+            };
+        };
+        uint8_t raw[3];
+    };
+
+    /// Array access operator to index into the crgb object
+    inline uint8_t &operator[](uint8_t x) __attribute__((always_inline))
+    {
+        return raw[x];
+    }
+
+    /// Array access operator to index into the crgb object
+    inline const uint8_t &operator[](uint8_t x) const __attribute__((always_inline))
+    {
+        return raw[x];
+    }
+
+    // default values are UNINITIALIZED
+    inline CRGB() __attribute__((always_inline)) = default;
+
+    /// allow construction from R, G, B
+    inline CRGB(uint8_t ir, uint8_t ig, uint8_t ib) __attribute__((always_inline))
+    : r(ir), g(ig), b(ib)
+    {
+    }
+
+    /// allow construction from 32-bit (really 24-bit) bit 0xRRGGBB color code
+    inline CRGB(uint32_t colorcode) __attribute__((always_inline))
+    : r((colorcode >> 16) & 0xFF), g((colorcode >> 8) & 0xFF), b((colorcode >> 0) & 0xFF)
+    {
+    }
+
+    /// allow construction from a LEDColorCorrection enum
+    inline CRGB(LEDColorCorrection colorcode) __attribute__((always_inline))
+    : r((colorcode >> 16) & 0xFF), g((colorcode >> 8) & 0xFF), b((colorcode >> 0) & 0xFF)
+    {
+    }
+
+    /// allow construction from a ColorTemperature enum
+    inline CRGB(ColorTemperature colorcode) __attribute__((always_inline))
+    : r((colorcode >> 16) & 0xFF), g((colorcode >> 8) & 0xFF), b((colorcode >> 0) & 0xFF)
+    {
+    }
+
+    /// allow copy construction
+    inline CRGB(const CRGB &rhs) __attribute__((always_inline)) = default;
+    /// allow construction from HSV color
+    inline CRGB(const CHSV &rhs) __attribute__((always_inline))
+    {
+        hsv2rgb_rainbow(rhs, *this);
+    }
+
+    /// allow assignment from one RGB struct to another
+    inline CRGB &operator=(const CRGB &rhs) __attribute__((always_inline)) = default;
+
+    /// allow assignment from 32-bit (really 24-bit) 0xRRGGBB color code
+    inline CRGB &operator=(const uint32_t colorcode) __attribute__((always_inline))
+    {
+        r = (colorcode >> 16) & 0xFF;
+        g = (colorcode >> 8) & 0xFF;
+        b = (colorcode >> 0) & 0xFF;
+        return *this;
+    }
+
+    /// allow assignment from R, G, and B
+    inline CRGB &setRGB(uint8_t nr, uint8_t ng, uint8_t nb) __attribute__((always_inline))
+    {
+        r = nr;
+        g = ng;
+        b = nb;
+        return *this;
+    }
+
+    /// allow assignment from H, S, and V
+    inline CRGB &setHSV(uint8_t hue, uint8_t sat, uint8_t val) __attribute__((always_inline))
+    {
+        hsv2rgb_rainbow(CHSV(hue, sat, val), *this);
+        return *this;
+    }
+
+    /// allow assignment from just a Hue, saturation and value automatically at max.
+    inline CRGB &setHue(uint8_t hue) __attribute__((always_inline))
+    {
+        hsv2rgb_rainbow(CHSV(hue, 255, 255), *this);
+        return *this;
+    }
+
+    /// allow assignment from HSV color
+    inline CRGB &operator=(const CHSV &rhs) __attribute__((always_inline))
+    {
+        hsv2rgb_rainbow(rhs, *this);
+        return *this;
+    }
+
+    /// allow assignment from 32-bit (really 24-bit) 0xRRGGBB color code
+    inline CRGB &setColorCode(uint32_t colorcode) __attribute__((always_inline))
+    {
+        r = (colorcode >> 16) & 0xFF;
+        g = (colorcode >> 8) & 0xFF;
+        b = (colorcode >> 0) & 0xFF;
+        return *this;
+    }
+
+    /// add one RGB to another, saturating at 0xFF for each channel
+    inline CRGB &operator+=(const CRGB &rhs)
+    {
+        r = qadd8(r, rhs.r);
+        g = qadd8(g, rhs.g);
+        b = qadd8(b, rhs.b);
+        return *this;
+    }
+
+    /// add a contstant to each channel, saturating at 0xFF
+    /// this is NOT an operator+= overload because the compiler
+    /// can't usefully decide when it's being passed a 32-bit
+    /// constant (e.g. CRGB::Red) and an 8-bit one (CRGB::Blue)
+    inline CRGB &addToRGB(uint8_t d)
+    {
+        r = qadd8(r, d);
+        g = qadd8(g, d);
+        b = qadd8(b, d);
+        return *this;
+    }
+
+    /// subtract one RGB from another, saturating at 0x00 for each channel
+    inline CRGB &operator-=(const CRGB &rhs)
+    {
+        r = qsub8(r, rhs.r);
+        g = qsub8(g, rhs.g);
+        b = qsub8(b, rhs.b);
+        return *this;
+    }
+
+    /// subtract a constant from each channel, saturating at 0x00
+    /// this is NOT an operator+= overload because the compiler
+    /// can't usefully decide when it's being passed a 32-bit
+    /// constant (e.g. CRGB::Red) and an 8-bit one (CRGB::Blue)
+    inline CRGB &subtractFromRGB(uint8_t d)
+    {
+        r = qsub8(r, d);
+        g = qsub8(g, d);
+        b = qsub8(b, d);
+        return *this;
+    }
+
+    /// subtract a constant of '1' from each channel, saturating at 0x00
+    inline CRGB &operator--() __attribute__((always_inline))
+    {
+        subtractFromRGB(1);
+        return *this;
+    }
+
+    /// subtract a constant of '1' from each channel, saturating at 0x00
+    inline CRGB operator--(int) __attribute__((always_inline))
+    {
+        CRGB retval(*this);
+        --(*this);
+        return retval;
+    }
+
+    /// add a constant of '1' from each channel, saturating at 0xFF
+    inline CRGB &operator++() __attribute__((always_inline))
+    {
+        addToRGB(1);
+        return *this;
+    }
+
+    /// add a constant of '1' from each channel, saturating at 0xFF
+    inline CRGB operator++(int) __attribute__((always_inline))
+    {
+        CRGB retval(*this);
+        ++(*this);
+        return retval;
+    }
+
+    /// divide each of the channels by a constant
+    inline CRGB &operator/=(uint8_t d)
+    {
+        r /= d;
+        g /= d;
+        b /= d;
+        return *this;
+    }
+
+    /// right shift each of the channels by a constant
+    inline CRGB &operator>>=(uint8_t d)
+    {
+        r >>= d;
+        g >>= d;
+        b >>= d;
+        return *this;
+    }
+
+    /// multiply each of the channels by a constant,
+    /// saturating each channel at 0xFF
+    inline CRGB &operator*=(uint8_t d)
+    {
+        r = qmul8(r, d);
+        g = qmul8(g, d);
+        b = qmul8(b, d);
+        return *this;
+    }
+
+    /// scale down a RGB to N 256ths of it's current brightness, using
+    /// 'video' dimming rules, which means that unless the scale factor is ZERO
+    /// each channel is guaranteed NOT to dim down to zero.  If it's already
+    /// nonzero, it'll stay nonzero, even if that means the hue shifts a little
+    /// at low brightness levels.
+    inline CRGB &nscale8_video(uint8_t scaledown)
+    {
+        nscale8x3_video(r, g, b, scaledown);
+        return *this;
+    }
+
+    /// %= is a synonym for nscale8_video.  Think of it is scaling down
+    /// by "a percentage"
+    inline CRGB &operator%=(uint8_t scaledown)
+    {
+        nscale8x3_video(r, g, b, scaledown);
+        return *this;
+    }
+
+    /// fadeLightBy is a synonym for nscale8_video( ..., 255-fadefactor)
+    inline CRGB &fadeLightBy(uint8_t fadefactor)
+    {
+        nscale8x3_video(r, g, b, 255 - fadefactor);
+        return *this;
+    }
+
+    /// scale down a RGB to N 256ths of it's current brightness, using
+    /// 'plain math' dimming rules, which means that if the low light levels
+    /// may dim all the way to 100% black.
+    inline CRGB &nscale8(uint8_t scaledown)
+    {
+        nscale8x3(r, g, b, scaledown);
+        return *this;
+    }
+
+    /// scale down a RGB to N 256ths of it's current brightness, using
+    /// 'plain math' dimming rules, which means that if the low light levels
+    /// may dim all the way to 100% black.
+    inline CRGB &nscale8(const CRGB &scaledown)
+    {
+        r = ::scale8(r, scaledown.r);
+        g = ::scale8(g, scaledown.g);
+        b = ::scale8(b, scaledown.b);
+        return *this;
+    }
+
+    /// return a CRGB object that is a scaled down version of this object
+    inline CRGB scale8(const CRGB &scaledown) const
+    {
+        CRGB out;
+        out.r = ::scale8(r, scaledown.r);
+        out.g = ::scale8(g, scaledown.g);
+        out.b = ::scale8(b, scaledown.b);
+        return out;
+    }
+
+    /// fadeToBlackBy is a synonym for nscale8( ..., 255-fadefactor)
+    inline CRGB &fadeToBlackBy(uint8_t fadefactor)
+    {
+        nscale8x3(r, g, b, 255 - fadefactor);
+        return *this;
+    }
+
+    /// "or" operator brings each channel up to the higher of the two values
+    inline CRGB &operator|=(const CRGB &rhs)
+    {
+        if (rhs.r > r)
+            r = rhs.r;
+        if (rhs.g > g)
+            g = rhs.g;
+        if (rhs.b > b)
+            b = rhs.b;
+        return *this;
+    }
+
+    /// "or" operator brings each channel up to the higher of the two values
+    inline CRGB &operator|=(uint8_t d)
+    {
+        if (d > r)
+            r = d;
+        if (d > g)
+            g = d;
+        if (d > b)
+            b = d;
+        return *this;
+    }
+
+    /// "and" operator brings each channel down to the lower of the two values
+    inline CRGB &operator&=(const CRGB &rhs)
+    {
+        if (rhs.r < r)
+            r = rhs.r;
+        if (rhs.g < g)
+            g = rhs.g;
+        if (rhs.b < b)
+            b = rhs.b;
+        return *this;
+    }
+
+    /// "and" operator brings each channel down to the lower of the two values
+    inline CRGB &operator&=(uint8_t d)
+    {
+        if (d < r)
+            r = d;
+        if (d < g)
+            g = d;
+        if (d < b)
+            b = d;
+        return *this;
+    }
+
+    /// this allows testing a CRGB for zero-ness
+    inline operator bool() const __attribute__((always_inline))
+    {
+        return r || g || b;
+    }
+
+    /// invert each channel
+    inline CRGB operator-()
+    {
+        CRGB retval;
+        retval.r = 255 - r;
+        retval.g = 255 - g;
+        retval.b = 255 - b;
+        return retval;
+    }
+
+#if (defined SmartMatrix_h || defined SmartMatrix3_h)
+    operator rgb24() const
+    {
+        rgb24 ret;
+        ret.red = r;
+        ret.green = g;
+        ret.blue = b;
+        return ret;
+    }
+#endif
+
+    /// Get the 'luma' of a CRGB object - aka roughly how much light the
+    /// CRGB pixel is putting out (from 0 to 255).
+    inline uint8_t getLuma() const
+    {
+        // Y' = 0.2126 R' + 0.7152 G' + 0.0722 B'
+        //      54            183       18 (!)
+
+        uint8_t luma = scale8_LEAVING_R1_DIRTY(r, 54) +
+                       scale8_LEAVING_R1_DIRTY(g, 183) +
+                       scale8_LEAVING_R1_DIRTY(b, 18);
+        cleanup_R1();
+        return luma;
+    }
+
+    /// Get the average of the R, G, and B values
+    inline uint8_t getAverageLight() const
+    {
+#if FASTLED_SCALE8_FIXED == 1
+        const uint8_t eightyfive = 85;
+#else
+        const uint8_t eightyfive = 86;
+#endif
+        uint8_t avg = scale8_LEAVING_R1_DIRTY(r, eightyfive) +
+                      scale8_LEAVING_R1_DIRTY(g, eightyfive) +
+                      scale8_LEAVING_R1_DIRTY(b, eightyfive);
+        cleanup_R1();
+        return avg;
+    }
+
+    /// maximize the brightness of this CRGB object
+    inline void maximizeBrightness(uint8_t limit = 255)
+    {
+        uint8_t max = red;
+        if (green > max)
+            max = green;
+        if (blue > max)
+            max = blue;
+
+        // stop div/0 when color is black
+        if (max > 0)
+        {
+            uint16_t factor = ((uint16_t)(limit)*256) / max;
+            red = (red * factor) / 256;
+            green = (green * factor) / 256;
+            blue = (blue * factor) / 256;
+        }
+    }
+
+    /// return a new CRGB object after performing a linear interpolation between this object and the passed in object
+    inline CRGB lerp8(const CRGB &other, fract8 frac) const
+    {
+        CRGB ret;
+
+        ret.r = lerp8by8(r, other.r, frac);
+        ret.g = lerp8by8(g, other.g, frac);
+        ret.b = lerp8by8(b, other.b, frac);
+
+        return ret;
+    }
+
+    /// return a new CRGB object after performing a linear interpolation between this object and the passed in object
+    inline CRGB lerp16(const CRGB &other, fract16 frac) const
+    {
+        CRGB ret;
+
+        ret.r = lerp16by16(r << 8, other.r << 8, frac) >> 8;
+        ret.g = lerp16by16(g << 8, other.g << 8, frac) >> 8;
+        ret.b = lerp16by16(b << 8, other.b << 8, frac) >> 8;
+
+        return ret;
+    }
+
+    /// getParity returns 0 or 1, depending on the
+    /// lowest bit of the sum of the color components.
+    inline uint8_t getParity()
+    {
+        uint8_t sum = r + g + b;
+        return (sum & 0x01);
+    }
+
+    /// setParity adjusts the color in the smallest
+    /// way possible so that the parity of the color
+    /// is now the desired value.  This allows you to
+    /// 'hide' one bit of information in the color.
+    ///
+    /// Ideally, we find one color channel which already
+    /// has data in it, and modify just that channel by one.
+    /// We don't want to light up a channel that's black
+    /// if we can avoid it, and if the pixel is 'grayscale',
+    /// (meaning that R==G==B), we modify all three channels
+    /// at once, to preserve the neutral hue.
+    ///
+    /// There's no such thing as a free lunch; in many cases
+    /// this 'hidden bit' may actually be visible, but this
+    /// code makes reasonable efforts to hide it as much
+    /// as is reasonably possible.
+    ///
+    /// Also, an effort is made to have make it such that
+    /// repeatedly setting the parity to different values
+    /// will not cause the color to 'drift'.  Toggling
+    /// the parity twice should generally result in the
+    /// original color again.
+    ///
+    inline void setParity(uint8_t parity)
+    {
+        uint8_t curparity = getParity();
+
+        if (parity == curparity)
+            return;
+
+        if (parity)
+        {
+            // going 'up'
+            if ((b > 0) && (b < 255))
+            {
+                if (r == g && g == b)
+                {
+                    ++r;
+                    ++g;
+                }
+                ++b;
+            }
+            else if ((r > 0) && (r < 255))
+            {
+                ++r;
+            }
+            else if ((g > 0) && (g < 255))
+            {
+                ++g;
+            }
+            else
+            {
+                if (r == g && g == b)
+                {
+                    r ^= 0x01;
+                    g ^= 0x01;
+                }
+                b ^= 0x01;
+            }
+        }
+        else
+        {
+            // going 'down'
+            if (b > 1)
+            {
+                if (r == g && g == b)
+                {
+                    --r;
+                    --g;
+                }
+                --b;
+            }
+            else if (g > 1)
+            {
+                --g;
+            }
+            else if (r > 1)
+            {
+                --r;
+            }
+            else
+            {
+                if (r == g && g == b)
+                {
+                    r ^= 0x01;
+                    g ^= 0x01;
+                }
+                b ^= 0x01;
+            }
+        }
+    }
+
+    /// Predefined RGB colors
+    typedef enum
+    {
+        AliceBlue = 0xF0F8FF,
+        Amethyst = 0x9966CC,
+        AntiqueWhite = 0xFAEBD7,
+        Aqua = 0x00FFFF,
+        Aquamarine = 0x7FFFD4,
+        Azure = 0xF0FFFF,
+        Beige = 0xF5F5DC,
+        Bisque = 0xFFE4C4,
+        Black = 0x000000,
+        BlanchedAlmond = 0xFFEBCD,
+        Blue = 0x0000FF,
+        BlueViolet = 0x8A2BE2,
+        Brown = 0xA52A2A,
+        BurlyWood = 0xDEB887,
+        CadetBlue = 0x5F9EA0,
+        Chartreuse = 0x7FFF00,
+        Chocolate = 0xD2691E,
+        Coral = 0xFF7F50,
+        CornflowerBlue = 0x6495ED,
+        Cornsilk = 0xFFF8DC,
+        Crimson = 0xDC143C,
+        Cyan = 0x00FFFF,
+        DarkBlue = 0x00008B,
+        DarkCyan = 0x008B8B,
+        DarkGoldenrod = 0xB8860B,
+        DarkGray = 0xA9A9A9,
+        DarkGrey = 0xA9A9A9,
+        DarkGreen = 0x006400,
+        DarkKhaki = 0xBDB76B,
+        DarkMagenta = 0x8B008B,
+        DarkOliveGreen = 0x556B2F,
+        DarkOrange = 0xFF8C00,
+        DarkOrchid = 0x9932CC,
+        DarkRed = 0x8B0000,
+        DarkSalmon = 0xE9967A,
+        DarkSeaGreen = 0x8FBC8F,
+        DarkSlateBlue = 0x483D8B,
+        DarkSlateGray = 0x2F4F4F,
+        DarkSlateGrey = 0x2F4F4F,
+        DarkTurquoise = 0x00CED1,
+        DarkViolet = 0x9400D3,
+        DeepPink = 0xFF1493,
+        DeepSkyBlue = 0x00BFFF,
+        DimGray = 0x696969,
+        DimGrey = 0x696969,
+        DodgerBlue = 0x1E90FF,
+        FireBrick = 0xB22222,
+        FloralWhite = 0xFFFAF0,
+        ForestGreen = 0x228B22,
+        Fuchsia = 0xFF00FF,
+        Gainsboro = 0xDCDCDC,
+        GhostWhite = 0xF8F8FF,
+        Gold = 0xFFD700,
+        Goldenrod = 0xDAA520,
+        Gray = 0x808080,
+        Grey = 0x808080,
+        Green = 0x008000,
+        GreenYellow = 0xADFF2F,
+        Honeydew = 0xF0FFF0,
+        HotPink = 0xFF69B4,
+        IndianRed = 0xCD5C5C,
+        Indigo = 0x4B0082,
+        Ivory = 0xFFFFF0,
+        Khaki = 0xF0E68C,
+        Lavender = 0xE6E6FA,
+        LavenderBlush = 0xFFF0F5,
+        LawnGreen = 0x7CFC00,
+        LemonChiffon = 0xFFFACD,
+        LightBlue = 0xADD8E6,
+        LightCoral = 0xF08080,
+        LightCyan = 0xE0FFFF,
+        LightGoldenrodYellow = 0xFAFAD2,
+        LightGreen = 0x90EE90,
+        LightGrey = 0xD3D3D3,
+        LightPink = 0xFFB6C1,
+        LightSalmon = 0xFFA07A,
+        LightSeaGreen = 0x20B2AA,
+        LightSkyBlue = 0x87CEFA,
+        LightSlateGray = 0x778899,
+        LightSlateGrey = 0x778899,
+        LightSteelBlue = 0xB0C4DE,
+        LightYellow = 0xFFFFE0,
+        Lime = 0x00FF00,
+        LimeGreen = 0x32CD32,
+        Linen = 0xFAF0E6,
+        Magenta = 0xFF00FF,
+        Maroon = 0x800000,
+        MediumAquamarine = 0x66CDAA,
+        MediumBlue = 0x0000CD,
+        MediumOrchid = 0xBA55D3,
+        MediumPurple = 0x9370DB,
+        MediumSeaGreen = 0x3CB371,
+        MediumSlateBlue = 0x7B68EE,
+        MediumSpringGreen = 0x00FA9A,
+        MediumTurquoise = 0x48D1CC,
+        MediumVioletRed = 0xC71585,
+        MidnightBlue = 0x191970,
+        MintCream = 0xF5FFFA,
+        MistyRose = 0xFFE4E1,
+        Moccasin = 0xFFE4B5,
+        NavajoWhite = 0xFFDEAD,
+        Navy = 0x000080,
+        OldLace = 0xFDF5E6,
+        Olive = 0x808000,
+        OliveDrab = 0x6B8E23,
+        Orange = 0xFFA500,
+        OrangeRed = 0xFF4500,
+        Orchid = 0xDA70D6,
+        PaleGoldenrod = 0xEEE8AA,
+        PaleGreen = 0x98FB98,
+        PaleTurquoise = 0xAFEEEE,
+        PaleVioletRed = 0xDB7093,
+        PapayaWhip = 0xFFEFD5,
+        PeachPuff = 0xFFDAB9,
+        Peru = 0xCD853F,
+        Pink = 0xFFC0CB,
+        Plaid = 0xCC5533,
+        Plum = 0xDDA0DD,
+        PowderBlue = 0xB0E0E6,
+        Purple = 0x800080,
+        Red = 0xFF0000,
+        RosyBrown = 0xBC8F8F,
+        RoyalBlue = 0x4169E1,
+        SaddleBrown = 0x8B4513,
+        Salmon = 0xFA8072,
+        SandyBrown = 0xF4A460,
+        SeaGreen = 0x2E8B57,
+        Seashell = 0xFFF5EE,
+        Sienna = 0xA0522D,
+        Silver = 0xC0C0C0,
+        SkyBlue = 0x87CEEB,
+        SlateBlue = 0x6A5ACD,
+        SlateGray = 0x708090,
+        SlateGrey = 0x708090,
+        Snow = 0xFFFAFA,
+        SpringGreen = 0x00FF7F,
+        SteelBlue = 0x4682B4,
+        Tan = 0xD2B48C,
+        Teal = 0x008080,
+        Thistle = 0xD8BFD8,
+        Tomato = 0xFF6347,
+        Turquoise = 0x40E0D0,
+        Violet = 0xEE82EE,
+        Wheat = 0xF5DEB3,
+        White = 0xFFFFFF,
+        WhiteSmoke = 0xF5F5F5,
+        Yellow = 0xFFFF00,
+        YellowGreen = 0x9ACD32,
+
+        // LED RGB color that roughly approximates
+        // the color of incandescent fairy lights,
+        // assuming that you're using FastLED
+        // color correction on your LEDs (recommended).
+        FairyLight = 0xFFE42D,
+        // If you are using no color correction, use this
+        FairyLightNCC = 0xFF9D2A
+
+    } HTMLColorCode;
+};
+
+inline __attribute__((always_inline)) bool operator==(const CRGB &lhs, const CRGB &rhs)
+{
+    return (lhs.r == rhs.r) && (lhs.g == rhs.g) && (lhs.b == rhs.b);
+}
+
+inline __attribute__((always_inline)) bool operator!=(const CRGB &lhs, const CRGB &rhs)
+{
+    return !(lhs == rhs);
+}
+
+inline __attribute__((always_inline)) bool operator<(const CRGB &lhs, const CRGB &rhs)
+{
+    uint16_t sl, sr;
+    sl = lhs.r + lhs.g + lhs.b;
+    sr = rhs.r + rhs.g + rhs.b;
+    return sl < sr;
+}
+
+inline __attribute__((always_inline)) bool operator>(const CRGB &lhs, const CRGB &rhs)
+{
+    uint16_t sl, sr;
+    sl = lhs.r + lhs.g + lhs.b;
+    sr = rhs.r + rhs.g + rhs.b;
+    return sl > sr;
+}
+
+inline __attribute__((always_inline)) bool operator>=(const CRGB &lhs, const CRGB &rhs)
+{
+    uint16_t sl, sr;
+    sl = lhs.r + lhs.g + lhs.b;
+    sr = rhs.r + rhs.g + rhs.b;
+    return sl >= sr;
+}
+
+inline __attribute__((always_inline)) bool operator<=(const CRGB &lhs, const CRGB &rhs)
+{
+    uint16_t sl, sr;
+    sl = lhs.r + lhs.g + lhs.b;
+    sr = rhs.r + rhs.g + rhs.b;
+    return sl <= sr;
+}
+
+__attribute__((always_inline)) inline CRGB operator+(const CRGB &p1, const CRGB &p2)
+{
+    return CRGB(qadd8(p1.r, p2.r),
+                qadd8(p1.g, p2.g),
+                qadd8(p1.b, p2.b));
+}
+
+__attribute__((always_inline)) inline CRGB operator-(const CRGB &p1, const CRGB &p2)
+{
+    return CRGB(qsub8(p1.r, p2.r),
+                qsub8(p1.g, p2.g),
+                qsub8(p1.b, p2.b));
+}
+
+__attribute__((always_inline)) inline CRGB operator*(const CRGB &p1, uint8_t d)
+{
+    return CRGB(qmul8(p1.r, d),
+                qmul8(p1.g, d),
+                qmul8(p1.b, d));
+}
+
+__attribute__((always_inline)) inline CRGB operator/(const CRGB &p1, uint8_t d)
+{
+    return CRGB(p1.r / d, p1.g / d, p1.b / d);
+}
+
+__attribute__((always_inline)) inline CRGB operator&(const CRGB &p1, const CRGB &p2)
+{
+    return CRGB(p1.r < p2.r ? p1.r : p2.r,
+                p1.g < p2.g ? p1.g : p2.g,
+                p1.b < p2.b ? p1.b : p2.b);
+}
+
+__attribute__((always_inline)) inline CRGB operator|(const CRGB &p1, const CRGB &p2)
+{
+    return CRGB(p1.r > p2.r ? p1.r : p2.r,
+                p1.g > p2.g ? p1.g : p2.g,
+                p1.b > p2.b ? p1.b : p2.b);
+}
+
+__attribute__((always_inline)) inline CRGB operator%(const CRGB &p1, uint8_t d)
+{
+    CRGB retval(p1);
+    retval.nscale8_video(d);
+    return retval;
+}
+
+/// RGB orderings, used when instantiating controllers to determine what
+/// order the controller should send RGB data out in, RGB being the default
+/// ordering.
+enum EOrder
+{
+    RGB = 0012,
+    RBG = 0021,
+    GRB = 0102,
+    GBR = 0120,
+    BRG = 0201,
+    BGR = 0210
+};
+
+FASTLED_NAMESPACE_END
+///@}
 
 #endif
