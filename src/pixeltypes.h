@@ -936,6 +936,10 @@ struct CRGBW
     {
         return (raw[0] == rhs.raw[0]) && (raw[1] == rhs.raw[1]) && (raw[2] == rhs.raw[2]) && (raw[3] == rhs.raw[3]);
     }
+    inline const bool operator!=(const CRGBW &rhs) const __attribute__((always_inline))
+    {
+        return !(*this == rhs);
+    }
 
     /// default values are UNITIALIZED
     inline CRGBW() __attribute__((always_inline)) = default;
